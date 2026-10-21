@@ -6,5 +6,8 @@
     "api-server": "https://rd.dbnetsoft.com",
     "key": "oVvmL6Q+d8FXzJyzEmheDLPr44I8qNQ79Alq27beddU=",
     "hide-network-settings": "Y"
+  },
+  "default-settings": {
+    "direct-server": "Y"
   }
 }
