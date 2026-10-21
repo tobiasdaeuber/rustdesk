@@ -2459,7 +2459,15 @@ pub fn rustdesk_interval(i: Interval) -> ThrottledInterval {
     ThrottledInterval::new(i)
 }
 
+// RemoteHelp: this build's name and server settings. Applied like a signed custom.txt, but
+// compiled in, so the build needs no custom client signature.
+const BUILTIN_CUSTOM_CLIENT: &str = include_str!("../remotehelp/client.json");
+
 pub fn load_custom_client() {
+    match serde_json::from_str(BUILTIN_CUSTOM_CLIENT) {
+        Ok(data) => apply_custom_client(data),
+        Err(e) => log::error!("Failed to parse built-in custom client config: {}", e),
+    }
     #[cfg(debug_assertions)]
     if let Ok(data) = std::fs::read_to_string("./custom.txt") {
         read_custom_client(data.trim());
@@ -2571,13 +2579,16 @@ pub fn read_custom_client(config: &str) {
         log::error!("Failed to dec custom client config");
         return;
     };
-    let Ok(mut data) =
+    let Ok(data) =
         serde_json::from_slice::<std::collections::HashMap<String, serde_json::Value>>(&data)
     else {
         log::error!("Failed to parse custom client config");
         return;
     };
+    apply_custom_client(data);
+}
 
+fn apply_custom_client(mut data: HashMap<String, serde_json::Value>) {
     if let Some(app_name) = data.remove("app-name") {
         if let Some(app_name) = app_name.as_str() {
             *config::APP_NAME.write().unwrap() = app_name.to_owned();
