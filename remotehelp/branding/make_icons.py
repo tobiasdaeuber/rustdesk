@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
-"""Render remotehelp/branding/icon.svg into every icon the Windows client uses.
+"""Render remotehelp/branding/icon.svg into every icon the Windows client uses, and the logos into the
+logo the client shows at the top of its home page.
 
 Needs Pillow and Microsoft Edge (headless rendering of the SVG). Run from anywhere:
     python remotehelp/branding/make_icons.py
 The outputs are committed, so the CI build does not need to run this.
+
+icon.svg, logo-light.png and logo-dark.png are copies of the RemoteHelp server repository's
+wwwroot/img/remotehelp-icon.svg and branding/remotehelp-logo(-dark).png (rendered there by
+tools/Render-Branding.ps1); copy them again when the branding changes there.
 """
 
 import os
@@ -15,7 +20,12 @@ from pathlib import Path
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[2]
-SVG = Path(__file__).resolve().parent / "icon.svg"
+BRANDING = Path(__file__).resolve().parent
+SVG = BRANDING / "icon.svg"
+# The home page shows assets/logo_light.png in the light theme and assets/logo_dark.png in the dark one
+# (flutter/lib/common.dart, loadLogo), at most 300 x 60. logo-light.png has dark text for the light theme.
+LOGOS = {"logo-light.png": "flutter/assets/logo_light.png", "logo-dark.png": "flutter/assets/logo_dark.png"}
+LOGO_MAX = (600, 120)  # twice the displayed size, for high-DPI screens
 EDGE = Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")) / "Microsoft/Edge/Application/msedge.exe"
 RENDER_SIZE = 1024
 ICO_SIZES = [16, 20, 24, 32, 40, 48, 64, 128, 256]
@@ -74,6 +84,16 @@ def save_ico(image: Image.Image, sizes: list, *paths: str) -> None:
         print(f"{p} ({', '.join(map(str, sizes))})")
 
 
+def save_logos() -> None:
+    for source, target in LOGOS.items():
+        image = Image.open(BRANDING / source).convert("RGBA")
+        # Without the transparent margins, so the logo uses the whole 300 x 60 the client gives it.
+        image = image.crop(image.getbbox())
+        image.thumbnail(LOGO_MAX, Image.LANCZOS)
+        image.save(ROOT / target)
+        print(f"{target} ({image.width}x{image.height})")
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         image = render(Path(tmp))
@@ -87,6 +107,7 @@ def main() -> None:
     save_png(image, 64, "res/64x64.png")
     save_png(image, 128, "res/128x128.png")
     save_png(image, 256, "res/128x128@2x.png")
+    save_logos()
 
 
 if __name__ == "__main__":

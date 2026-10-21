@@ -63,3 +63,9 @@ flutter/web/
 
 # RemoteHelp build output
 /remotehelp/out/
+
+# RemoteHelp branding sources and the home page logos (the upstream *png / *svg rules above would hide them)
+!/remotehelp/branding/*.svg
+!/remotehelp/branding/*.png
+!/flutter/assets/logo_light.png
+!/flutter/assets/logo_dark.png

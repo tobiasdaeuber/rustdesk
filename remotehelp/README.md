@@ -9,6 +9,7 @@ This branch (`remotehelp`) of the RustDesk fork builds the Windows x64 client fo
 |--------|-------|
 | App name *RemoteHelp*; ID/relay server, key and API server fixed; Settings → Network hidden | `remotehelp/client.json`, compiled in by `load_custom_client()` in `src/common.rs` |
 | [db] icon for exe, tray, shortcuts and UI | `remotehelp/branding/icon.svg` → `make_icons.py` → `res/*.ico/png`, `flutter/assets/icon.*`, `flutter/windows/runner/resources/app_icon.ico` |
+| RemoteHelp logo at the top of the home page (light and dark theme) | `remotehelp/branding/logo-light.png`, `logo-dark.png` → `make_icons.py` → `flutter/assets/logo_light.png`, `logo_dark.png` |
 | Version info (product name, company) | `flutter/windows/runner/Runner.rc`, `[package.metadata.winres]` in `Cargo.toml` and `libs/portable/Cargo.toml` |
 | Slim Windows x64 CI build, unsigned | `.github/workflows/remotehelp-windows.yml` |
 | Local signing, packing and publishing | `remotehelp/build-client.ps1` |
@@ -53,7 +54,10 @@ with a build that trusts a new key.
 ## Changing server or branding
 
 * Server, key or hidden settings: edit `remotehelp/client.json`.
-* Icon: replace `remotehelp/branding/icon.svg`, run `python remotehelp/branding/make_icons.py`, commit the outputs.
+* Icon and logo: they come from the RemoteHelp server repository (`wwwroot/img/remotehelp-icon.svg`,
+  `branding/remotehelp-logo.png` and `-dark.png`, rendered there by `tools/Render-Branding.ps1`). Copy them to
+  `remotehelp/branding/` as `icon.svg`, `logo-light.png` and `logo-dark.png`, run
+  `python remotehelp/branding/make_icons.py` (needs Pillow and Microsoft Edge), commit the outputs.
 
 Commit, push to `remotehelp`, run the build script.
 
