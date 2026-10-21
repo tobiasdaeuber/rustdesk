@@ -33,6 +33,8 @@
 
 .PARAMETER Publish
     Publish the signed installer as a GitHub release with signed update metadata.
+    With -NoSign it becomes a pre-release titled "unsigned test": clients update to it just the same
+    (they check the update metadata signature, not the code signature), Windows just warns on manual installs.
 
 .PARAMETER UpdateKeyFile
     Base64 ed25519 seed of the update signing key. Its public half is compiled into the client
@@ -44,6 +46,8 @@
     .\remotehelp\build-client.ps1 -Publish
 .EXAMPLE
     .\remotehelp\build-client.ps1 -RunId 12345678901 -Publish
+.EXAMPLE
+    .\remotehelp\build-client.ps1 -Publish -NoSign    # unsigned test release, e.g. to try the auto-update
 #>
 [CmdletBinding()]
 param(
@@ -58,7 +62,6 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-if ($Publish -and $NoSign) { throw '-Publish needs signed files; drop -NoSign.' }
 if ($Publish -and -not (Test-Path $UpdateKeyFile)) { throw "Update signing key not found: $UpdateKeyFile" }
 $Workflow = 'remotehelp-windows.yml'
 $Artifact = 'remotehelp-windows-x86_64'
@@ -219,9 +222,15 @@ if ($Publish) {
         Remove-Item Env:RUSTDESK_UPDATE_ED25519_SEED
     }
     $commit = gh run view "$RunId" -R $Repo --json headSha --jq .headSha
-    Invoke-Native gh @('release', 'create', $version, $installer, $metadata, $signature, '-R', $Repo,
-        '--target', $commit, '--title', "RemoteHelp $version",
-        '--notes', "RemoteHelp client $version for Windows x64, built by run https://github.com/$Repo/actions/runs/$RunId.")
+    $notes = "RemoteHelp client $version for Windows x64, built by run https://github.com/$Repo/actions/runs/$RunId."
+    $releaseArgs = @('release', 'create', $version, $installer, $metadata, $signature, '-R', $Repo, '--target', $commit)
+    if ($NoSign) {
+        $releaseArgs += @('--prerelease', '--title', "RemoteHelp $version (unsigned test)",
+            '--notes', "$notes`n`nUnsigned test build (no code signature) for trying the auto-update.")
+    } else {
+        $releaseArgs += @('--title', "RemoteHelp $version", '--notes', $notes)
+    }
+    Invoke-Native gh $releaseArgs
     Write-Host "Release: https://github.com/$Repo/releases/tag/$version"
     Write-Host "Roll it out in the RemoteHelp portal: Settings -> Client updates -> $version" -ForegroundColor Yellow
 }
