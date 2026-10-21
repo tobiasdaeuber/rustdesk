@@ -8,6 +8,7 @@
     "hide-network-settings": "Y"
   },
   "default-settings": {
-    "direct-server": "Y"
+    "direct-server": "Y",
+    "allow-auto-update": "Y"
   }
 }

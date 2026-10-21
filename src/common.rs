@@ -1020,6 +1020,10 @@ pub fn check_software_update() {
     }
 }
 
+// RemoteHelp: updates are releases of this GitHub repository, announced by the RemoteHelp server.
+pub(crate) const UPDATE_RELEASE_OWNER: &str = "tobiasdaeuber";
+pub(crate) const UPDATE_RELEASE_REPO: &str = "rustdesk";
+
 pub(crate) fn release_id_from_update_url(update_url: &str) -> ResultType<String> {
     let url = url::Url::parse(update_url)?;
     if url.scheme() != "https" || url.host_str() != Some("github.com") {
@@ -1050,8 +1054,12 @@ pub(crate) fn release_id_from_update_url(update_url: &str) -> ResultType<String>
     };
     let segments = segments.collect::<Vec<_>>();
     let release_id = match segments.as_slice() {
-        ["rustdesk", "rustdesk", "releases", "tag", release_id] => *release_id,
-        ["rustdesk", "rustdesk", "releases", "tag", release_id, ""] => *release_id,
+        [owner, repo, "releases", "tag", release_id]
+        | [owner, repo, "releases", "tag", release_id, ""]
+            if *owner == UPDATE_RELEASE_OWNER && *repo == UPDATE_RELEASE_REPO =>
+        {
+            *release_id
+        }
         _ => bail!(
             "Update URL is not a RustDesk release tag URL: {}",
             update_url
@@ -1082,7 +1090,18 @@ pub(crate) fn url_has_explicit_port(raw_url: &str) -> bool {
 
 pub(crate) fn display_version_from_release_id(release_id: &str) -> ResultType<String> {
     let display_version = release_id.strip_prefix('v').unwrap_or(release_id);
-    let segments = display_version.split('.').collect::<Vec<_>>();
+    // RemoteHelp: "1.5.1-2" is revision 2 of the RemoteHelp build of RustDesk 1.5.1;
+    // get_version_number() orders it after 1.5.1 and before 1.5.2.
+    let (base_version, revision) = match display_version.split_once('-') {
+        Some((base, revision)) => (base, Some(revision)),
+        None => (display_version, None),
+    };
+    if let Some(revision) = revision {
+        if !matches!(revision.parse::<u8>(), Ok(1..=9)) || revision.len() != 1 {
+            bail!("Release id has an invalid revision: {}", release_id);
+        }
+    }
+    let segments = base_version.split('.').collect::<Vec<_>>();
     if segments.len() != 3
         || segments.iter().any(|segment| {
             segment.is_empty()
@@ -1126,12 +1145,19 @@ fn process_software_update_check_response(bytes: Bytes) -> ResultType<()> {
     Ok(())
 }
 
-// No need to check `danger_accept_invalid_cert` for now.
-// Because the url is always `https://api.rustdesk.com/version/latest`.
+// RemoteHelp: asks the configured API server (the RemoteHelp server) instead of api.rustdesk.com.
 #[tokio::main(flavor = "current_thread")]
 pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
-    let (request, url) =
+    let (request, _) =
         hbb_common::version_check_request(hbb_common::VER_TYPE_RUSTDESK_CLIENT.to_string());
+    let api_server = get_api_server(
+        Config::get_option("api-server"),
+        Config::get_option("custom-rendezvous-server"),
+    );
+    if api_server.is_empty() {
+        bail!("No API server configured, cannot check for updates");
+    }
+    let url = format!("{api_server}/api/version/latest");
     let proxy_conf = Config::get_socks();
     let tls_url = get_url_for_tls(&url, &proxy_conf);
     let tls_type = get_cached_tls_type(tls_url);
@@ -3069,10 +3095,11 @@ mod tests {
 
     #[test]
     fn parses_stable_rustdesk_release_url() {
-        let update_url = "https://github.com/rustdesk/rustdesk/releases/tag/v1.4.6";
+        let update_url = "https://github.com/tobiasdaeuber/rustdesk/releases/tag/v1.4.6";
 
         assert_eq!(release_id_from_update_url(update_url).unwrap(), "v1.4.6");
         assert_eq!(display_version_from_release_id("v1.4.6").unwrap(), "1.4.6");
+        assert_eq!(display_version_from_release_id("1.5.1-2").unwrap(), "1.5.1-2");
         assert_eq!(
             release_id_from_update_url(&format!("{update_url}/")).unwrap(),
             "v1.4.6"
@@ -3082,23 +3109,31 @@ mod tests {
     #[test]
     fn rejects_untrusted_release_urls_and_unstable_versions() {
         for update_url in [
-            "http://github.com/rustdesk/rustdesk/releases/tag/v1.4.6",
-            "https://github.com:8443/rustdesk/rustdesk/releases/tag/v1.4.6",
-            "https://github.com:443/rustdesk/rustdesk/releases/tag/v1.4.6",
-            "https://user@github.com/rustdesk/rustdesk/releases/tag/v1.4.6",
-            "https://example.com/rustdesk/rustdesk/releases/tag/v1.4.6",
+            "http://github.com/tobiasdaeuber/rustdesk/releases/tag/v1.4.6",
+            "https://github.com:8443/tobiasdaeuber/rustdesk/releases/tag/v1.4.6",
+            "https://github.com:443/tobiasdaeuber/rustdesk/releases/tag/v1.4.6",
+            "https://user@github.com/tobiasdaeuber/rustdesk/releases/tag/v1.4.6",
+            "https://example.com/tobiasdaeuber/rustdesk/releases/tag/v1.4.6",
             "https://github.com/other/rustdesk/releases/tag/v1.4.6",
-            "https://github.com/rustdesk/other/releases/tag/v1.4.6",
-            "https://github.com/rustdesk/rustdesk/releases/download/v1.4.6/rustdesk.exe",
-            "https://github.com/rustdesk/rustdesk/releases/tag/v1.4.6?x=1",
-            "https://github.com/rustdesk/rustdesk/releases/tag/v1.4.6#asset",
-            "https://github.com/rustdesk/rustdesk/releases/tag/v1.4.6/extra",
-            "https://github.com/rustdesk/rustdesk/releases/tag/v1%2F4%2F6",
-            "https://github.com/rustdesk/rustdesk/releases/tag/%2e%2e",
+            "https://github.com/rustdesk/rustdesk/releases/tag/v1.4.6",
+            "https://github.com/tobiasdaeuber/other/releases/tag/v1.4.6",
+            "https://github.com/tobiasdaeuber/rustdesk/releases/download/v1.4.6/rustdesk.exe",
+            "https://github.com/tobiasdaeuber/rustdesk/releases/tag/v1.4.6?x=1",
+            "https://github.com/tobiasdaeuber/rustdesk/releases/tag/v1.4.6#asset",
+            "https://github.com/tobiasdaeuber/rustdesk/releases/tag/v1.4.6/extra",
+            "https://github.com/tobiasdaeuber/rustdesk/releases/tag/v1%2F4%2F6",
+            "https://github.com/tobiasdaeuber/rustdesk/releases/tag/%2e%2e",
         ] {
             assert!(release_id_from_update_url(update_url).is_err());
         }
-        for release_id in ["v1.4.6-rc1", "nightly", "v9223372036854775807.1.1"] {
+        for release_id in [
+            "v1.4.6-rc1",
+            "1.5.1-0",
+            "1.5.1-10",
+            "1.5.1-",
+            "nightly",
+            "v9223372036854775807.1.1",
+        ] {
             assert!(display_version_from_release_id(release_id).is_err());
         }
     }

@@ -11,7 +11,9 @@ This branch (`remotehelp`) of the RustDesk fork builds the Windows x64 client fo
 | [db] icon for exe, tray, shortcuts and UI | `remotehelp/branding/icon.svg` → `make_icons.py` → `res/*.ico/png`, `flutter/assets/icon.*`, `flutter/windows/runner/resources/app_icon.ico` |
 | Version info (product name, company) | `flutter/windows/runner/Runner.rc`, `[package.metadata.winres]` in `Cargo.toml` and `libs/portable/Cargo.toml` |
 | Slim Windows x64 CI build, unsigned | `.github/workflows/remotehelp-windows.yml` |
-| Local signing and packing | `remotehelp/build-client.ps1` |
+| Local signing, packing and publishing | `remotehelp/build-client.ps1` |
+| Auto-update from this fork's releases, announced by the RemoteHelp server, signed with the RemoteHelp update key; revisions like `1.5.1-2` | `src/common.rs` (`do_check_software_update`, `UPDATE_RELEASE_*`, `display_version_from_release_id`), `src/updater/artifact.rs`, `src/update_metadata.rs` (`TRUSTED_UPDATE_KEYS`), `res/update/generate_update_metadata.py` (`KEY_ID`) |
+| Version | `remotehelp/set-version.ps1` (Cargo.toml, Cargo.lock) |
 
 `client.json` uses the format of a RustDesk custom client (`custom.txt`): `app-name`, `override-settings`
 (user cannot change), `default-settings` (initial values). Being compiled in, it needs no signature.
@@ -29,6 +31,24 @@ Plug in the code-signing token, then in this repository:
 It starts the GitHub Actions build, waits for it (45–75 min), downloads the result, signs every
 `.exe`/`.dll` here, packs them into `remotehelp\out\RemoteHelp-<version>-x86_64.exe` and signs that.
 `-RunId <id>` re-uses a finished run; `-NoSign` skips signing; `-CertThumbprint` picks a certificate.
+
+## Releasing an update
+
+Installed clients check the RemoteHelp server once a day (`POST <api-server>/api/version/latest`). When the
+server announces a version higher than their own, they download it from this fork's GitHub release, check the
+signed `rustdesk-update.json` against the RemoteHelp update key, and install it while no session is active.
+Auto-update is on by default (`allow-auto-update` in `client.json`) and only runs on installed clients.
+
+1. Raise the version: `.\remotehelp\set-version.ps1 1.5.1-2` (revision 1–9 on top of the RustDesk
+   version; a merged RustDesk release resets it, e.g. `1.5.2`). Commit and push.
+2. Plug in the token and run `.\remotehelp\build-client.ps1 -Publish`. It builds, signs, packs, signs the
+   update metadata and creates the release `<version>` here.
+3. Roll it out in the RemoteHelp portal: **Settings → Client updates**, enter the version, save.
+   Clearing the field stops announcing; clients never downgrade.
+
+The update key's seed lives in `%APPDATA%\RemoteHelp\update-signing\ed25519-seed.txt` (not in this repository).
+Back it up: without it no further updates can be published, and clients would have to be reinstalled by hand
+with a build that trusts a new key.
 
 ## Changing server or branding
 

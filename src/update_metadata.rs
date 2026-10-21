@@ -27,12 +27,14 @@ const METADATA_SCHEMA_VERSION: u32 = 1;
 const SIGNATURE_SCHEMA_VERSION: u32 = 1;
 const SIGNATURE_ALGORITHM: &str = "ed25519";
 
+// RemoteHelp: only updates signed with the RemoteHelp update key are accepted
+// (public half of the seed used by remotehelp/build-client.ps1).
 const TRUSTED_UPDATE_KEYS: &[TrustedUpdateKey] = &[TrustedUpdateKey {
-    key_id: "2026-ed25519-main",
+    key_id: "remotehelp-2026-ed25519",
     algorithm: SIGNATURE_ALGORITHM,
     public_key: [
-        118, 252, 116, 215, 49, 217, 220, 109, 145, 119, 210, 101, 225, 198, 63, 2, 41, 127, 197,
-        127, 52, 251, 6, 204, 125, 117, 96, 204, 187, 166, 85, 59,
+        140, 172, 29, 25, 214, 24, 157, 211, 200, 187, 211, 160, 85, 192, 68, 18, 114, 64, 67,
+        234, 221, 82, 122, 119, 128, 161, 251, 79, 70, 116, 96, 8,
     ],
 }];
 

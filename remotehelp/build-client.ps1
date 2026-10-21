@@ -9,8 +9,12 @@
        (one signtool call, so the token asks for its PIN once).
     4. Packs the signed folder into the template's RDPKG resource -> RemoteHelp-<version>-x86_64.exe.
     5. Signs that installer and verifies both signatures.
+    6. With -Publish: signs update metadata with the update key and creates the GitHub release
+       <version> in the fork. Installed clients take it once the RemoteHelp server announces it
+       (portal: Settings -> Client updates).
 
     The token must be plugged in before step 3. Output goes to remotehelp\out\.
+    The version comes from Cargo.toml of the built commit; set it with set-version.ps1.
 
 .PARAMETER RunId
     Use the artifact of an existing workflow run instead of starting a new build.
@@ -27,10 +31,19 @@
 .PARAMETER NoSign
     Skip signing (for testing the pipeline without the token).
 
+.PARAMETER Publish
+    Publish the signed installer as a GitHub release with signed update metadata.
+
+.PARAMETER UpdateKeyFile
+    Base64 ed25519 seed of the update signing key. Its public half is compiled into the client
+    (src/update_metadata.rs); without this file no further updates can be published - keep a backup.
+
 .EXAMPLE
     .\remotehelp\build-client.ps1
 .EXAMPLE
-    .\remotehelp\build-client.ps1 -RunId 12345678901
+    .\remotehelp\build-client.ps1 -Publish
+.EXAMPLE
+    .\remotehelp\build-client.ps1 -RunId 12345678901 -Publish
 #>
 [CmdletBinding()]
 param(
@@ -39,10 +52,14 @@ param(
     [string]$Repo = 'tobiasdaeuber/rustdesk',
     [string]$CertThumbprint,
     [string]$TimestampUrl = 'http://timestamp.digicert.com',
-    [switch]$NoSign
+    [switch]$NoSign,
+    [switch]$Publish,
+    [string]$UpdateKeyFile = (Join-Path $env:APPDATA 'RemoteHelp\update-signing\ed25519-seed.txt')
 )
 
 $ErrorActionPreference = 'Stop'
+if ($Publish -and $NoSign) { throw '-Publish needs signed files; drop -NoSign.' }
+if ($Publish -and -not (Test-Path $UpdateKeyFile)) { throw "Update signing key not found: $UpdateKeyFile" }
 $Workflow = 'remotehelp-windows.yml'
 $Artifact = 'remotehelp-windows-x86_64'
 $AppName = 'RemoteHelp'
@@ -111,6 +128,13 @@ if ($LASTEXITCODE -ne 0) {
     Write-Host 'Installing the Python brotli package (needed to pack the installer)...'
     Invoke-Native $python @('-m', 'pip', 'install', '--user', '--quiet', 'brotli')
 }
+if ($Publish) {
+    & $python -c 'import cryptography' 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host 'Installing the Python cryptography package (needed to sign update metadata)...'
+        Invoke-Native $python @('-m', 'pip', 'install', '--user', '--quiet', 'cryptography')
+    }
+}
 if (-not $NoSign) { $script:SignTool = Find-SignTool }
 
 # --- Build on GitHub Actions -------------------------------------------------------------------
@@ -142,9 +166,15 @@ if (-not (Test-Path (Join-Path $appDir 'rustdesk.exe')) -or -not (Test-Path $tem
 
 # The process must be <app name>.exe; the app relies on it to find its own processes.
 Rename-Item (Join-Path $appDir 'rustdesk.exe') "$AppName.exe"
-$version = (Get-Item (Join-Path $appDir "$AppName.exe")).VersionInfo.ProductVersion
-# Drop the build metadata ("1.5.1+68" -> "1.5.1") for the file name.
-$version = if ($version) { ($version -split '\+')[0] } else { 'dev' }
+# The client's own version (Cargo.toml), which the updater compares; the file version info
+# carries Flutter's version instead.
+$version = (& (Join-Path $appDir "$AppName.exe") --version | Out-String).Trim()
+if ($version -notmatch '^\d+\.\d+\.\d+(-[1-9])?$') { throw "Unexpected client version '$version'" }
+Write-Host "Client version: $version"
+if ($Publish) {
+    gh release view $version -R $Repo --json tagName 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) { throw "Release $version already exists; raise the version with set-version.ps1 and rebuild." }
+}
 
 # --- Sign the app files ------------------------------------------------------------------------
 Write-Step $(if ($NoSign) { 'Listing unsigned app files (-NoSign: not signing)' } else { 'Signing the app files (the token may ask for its PIN)' })
@@ -170,6 +200,30 @@ if (-not $NoSign) {
 if (-not $NoSign) {
     Write-Step 'Verifying signatures'
     Invoke-Native $script:SignTool @('verify', '/pa', '/q', $installer, (Join-Path $appDir "$AppName.exe"))
+}
+
+if ($Publish) {
+    Write-Step "Publishing release $version"
+    $metadata = Join-Path $Out 'rustdesk-update.json'
+    $signature = Join-Path $Out 'rustdesk-update.json.sig'
+    $env:RUSTDESK_UPDATE_ED25519_SEED = (Get-Content $UpdateKeyFile -Raw).Trim()
+    try {
+        # File names and schema are what the client's updater expects (src/updater/artifact.rs).
+        Invoke-Native $python @((Join-Path $RepoRoot 'res\update\generate_update_metadata.py'), 'sign',
+            '--artifact', 'windows', 'x86_64', 'exe', $installer,
+            '--version', $version, '--release-id', $version, '--package-id', 'rustdesk',
+            '--release-base-url', "https://github.com/$Repo/releases/download",
+            '--published-at', (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'),
+            '--metadata-out', $metadata, '--signature-out', $signature)
+    } finally {
+        Remove-Item Env:RUSTDESK_UPDATE_ED25519_SEED
+    }
+    $commit = gh run view "$RunId" -R $Repo --json headSha --jq .headSha
+    Invoke-Native gh @('release', 'create', $version, $installer, $metadata, $signature, '-R', $Repo,
+        '--target', $commit, '--title', "RemoteHelp $version",
+        '--notes', "RemoteHelp client $version for Windows x64, built by run https://github.com/$Repo/actions/runs/$RunId.")
+    Write-Host "Release: https://github.com/$Repo/releases/tag/$version"
+    Write-Host "Roll it out in the RemoteHelp portal: Settings -> Client updates -> $version" -ForegroundColor Yellow
 }
 
 Write-Host ''
