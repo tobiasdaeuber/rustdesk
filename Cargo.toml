@@ -258,6 +258,7 @@ webrtc-sctp = { git = "https://github.com/rustdesk-org/webrtc", rev = "49c89bd8d
 [package.metadata.winres]
 LegalCopyright = "dbnetsoft. Based on RustDesk, Copyright © 2026 Purslane Tech Pte. Ltd. (AGPL-3.0)"
 ProductName = "RemoteHelp"
+CompanyName = "dbnetsoft"
 FileDescription = "RemoteHelp"
 OriginalFilename = "RemoteHelp.exe"
 

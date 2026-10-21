@@ -143,10 +143,11 @@ if (-not (Test-Path (Join-Path $appDir 'rustdesk.exe')) -or -not (Test-Path $tem
 # The process must be <app name>.exe; the app relies on it to find its own processes.
 Rename-Item (Join-Path $appDir 'rustdesk.exe') "$AppName.exe"
 $version = (Get-Item (Join-Path $appDir "$AppName.exe")).VersionInfo.ProductVersion
-if (-not $version) { $version = 'dev' }
+# Drop the build metadata ("1.5.1+68" -> "1.5.1") for the file name.
+$version = if ($version) { ($version -split '\+')[0] } else { 'dev' }
 
 # --- Sign the app files ------------------------------------------------------------------------
-Write-Step 'Signing the app files (the token may ask for its PIN)'
+Write-Step $(if ($NoSign) { 'Listing unsigned app files (-NoSign: not signing)' } else { 'Signing the app files (the token may ask for its PIN)' })
 $unsigned = Get-ChildItem $appDir -Recurse -Include *.exe, *.dll |
     Where-Object { (Get-AuthenticodeSignature $_.FullName).Status -ne 'Valid' } |
     ForEach-Object { $_.FullName }
@@ -161,8 +162,10 @@ $installer = Join-Path $Out "$AppName-$version-x86_64.exe"
 Copy-Item $template $installer -Force
 Set-PackagePayload $installer $payload
 
-Write-Step 'Signing the installer'
-Invoke-Sign @($installer)
+if (-not $NoSign) {
+    Write-Step 'Signing the installer'
+    Invoke-Sign @($installer)
+}
 
 if (-not $NoSign) {
     Write-Step 'Verifying signatures'
@@ -171,4 +174,4 @@ if (-not $NoSign) {
 
 Write-Host ''
 Write-Host "Done: $installer" -ForegroundColor Green
-Write-Host "Unpacked, signed app folder: $appDir"
+Write-Host "Unpacked app folder: $appDir"

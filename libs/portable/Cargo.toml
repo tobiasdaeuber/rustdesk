@@ -29,6 +29,7 @@ native-windows-gui = {version = "1.0", default-features = false, features = ["an
 [package.metadata.winres]
 LegalCopyright = "dbnetsoft. Based on RustDesk, Copyright © 2026 Purslane Tech Pte. Ltd. (AGPL-3.0)"
 ProductName = "RemoteHelp"
+CompanyName = "dbnetsoft"
 OriginalFilename = "RemoteHelp.exe"
 FileDescription = "RemoteHelp"
 #ProductVersion = ""
