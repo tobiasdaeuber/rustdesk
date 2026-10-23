@@ -51,7 +51,13 @@ fn make_tray() -> hbb_common::ResultType<()> {
     }
 
     let (icon_rgba, icon_width, icon_height) = {
-        let image = load_icon_from_asset()
+        // RemoteHelp: macOS draws the tray icon as a template (only its alpha counts), where the
+        // coloured assets/icon.png would be a plain tile; res/mac-tray-dark-x2.png is the RemoteHelp one.
+        #[cfg(target_os = "macos")]
+        let asset_icon = None;
+        #[cfg(not(target_os = "macos"))]
+        let asset_icon = load_icon_from_asset();
+        let image = asset_icon
             .unwrap_or(image::load_from_memory(icon).context("Failed to open icon path")?)
             .into_rgba8();
         let (width, height) = image.dimensions();
@@ -298,6 +304,7 @@ async fn start_query_session_count(sender: std::sync::mpsc::Sender<Data>) {
     }
 }
 
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 fn load_icon_from_asset() -> Option<image::DynamicImage> {
     let Some(path) = std::env::current_exe().map_or(None, |x| x.parent().map(|x| x.to_path_buf()))
     else {

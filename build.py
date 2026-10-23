@@ -946,7 +946,17 @@ def build_flutter_dmg(version, features):
     mac_arch = 'arm64' if platform.machine().lower() in ('arm64', 'aarch64') else 'x86_64'
     system2(
         f'FLUTTER_XCODE_ARCHS={mac_arch} FLUTTER_XCODE_ONLY_ACTIVE_ARCH=YES flutter build macos --release')
-    system2('cp -rf ../target/release/service ./build/macos/Build/Products/Release/RustDesk.app/Contents/MacOS/')
+    # RemoteHelp: the bundle is named after PRODUCT_NAME (RemoteHelp.app), and its short version is
+    # the client version ("1.5.1-2"), which the macOS updater compares with the announced release;
+    # Flutter would turn the revision into "1.5.12".
+    app_name = 'RustDesk'
+    with open('macos/Runner/Configs/AppInfo.xcconfig', encoding='utf-8') as fh:
+        for line in fh:
+            if line.startswith('PRODUCT_NAME'):
+                app_name = line.split('=', 1)[1].strip()
+    app_dir = f'./build/macos/Build/Products/Release/{app_name}.app'
+    system2(f'cp -rf ../target/release/service {app_dir}/Contents/MacOS/')
+    system2(f'/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString {version}" {app_dir}/Contents/Info.plist')
     '''
     system2(
         "create-dmg --volname \"RustDesk Installer\" --window-pos 200 120 --window-size 800 400 --icon-size 100 --app-drop-link 600 185 --icon RustDesk.app 200 190 --hide-extension RustDesk.app rustdesk.dmg ./build/macos/Build/Products/Release/RustDesk.app")

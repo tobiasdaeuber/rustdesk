@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Render remotehelp/branding/icon.svg into every icon the Windows client uses, and the logos into the
-logo the client shows at the top of its home page.
+"""Render remotehelp/branding/icon.svg into every icon the Windows and macOS clients use, and the logos
+into the logo the client shows at the top of its home page.
 
-Needs Pillow and Microsoft Edge (headless rendering of the SVG). Run from anywhere:
+Needs Pillow and Microsoft Edge or Google Chrome (headless rendering of the SVG); runs on Windows and
+macOS. Run from anywhere:
     python remotehelp/branding/make_icons.py
 The outputs are committed, so the CI build does not need to run this.
 
@@ -17,7 +18,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageChops
 
 ROOT = Path(__file__).resolve().parents[2]
 BRANDING = Path(__file__).resolve().parent
@@ -26,10 +27,26 @@ SVG = BRANDING / "icon.svg"
 # (flutter/lib/common.dart, loadLogo), at most 300 x 60. logo-light.png has dark text for the light theme.
 LOGOS = {"logo-light.png": "flutter/assets/logo_light.png", "logo-dark.png": "flutter/assets/logo_dark.png"}
 LOGO_MAX = (600, 120)  # twice the displayed size, for high-DPI screens
-EDGE = Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")) / "Microsoft/Edge/Application/msedge.exe"
+BROWSERS = [
+    Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")) / "Microsoft/Edge/Application/msedge.exe",
+    Path("/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"),
+    Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+]
 RENDER_SIZE = 1024
 ICO_SIZES = [16, 20, 24, 32, 40, 48, 64, 128, 256]
 TRAY_SIZES = [16, 20, 24, 32, 40, 48, 64]
+# macOS: the app icon sits on Apple's 1024 grid with a 100 px margin; the menu bar icon is a template
+# (macOS uses only its alpha) of 30 pt at 2x, the size of upstream's res/mac-tray-dark-x2.png.
+MAC_ICON_CONTENT = 824
+MAC_TRAY_SIZE = 60
+MAC_TRAY_CONTENT = 52
+
+
+def find_browser() -> Path:
+    for browser in BROWSERS:
+        if browser.exists():
+            return browser
+    raise SystemExit("Neither Microsoft Edge nor Google Chrome found")
 
 
 def render(tmp: Path) -> Image.Image:
@@ -44,7 +61,7 @@ def render(tmp: Path) -> Image.Image:
     png = tmp / "icon.png"
     subprocess.run(
         [
-            str(EDGE),
+            str(find_browser()),
             "--headless=new",
             # Own profile, or a running Edge takes the call over and nothing is written.
             f"--user-data-dir={tmp / 'profile'}",
@@ -59,7 +76,7 @@ def render(tmp: Path) -> Image.Image:
         check=True,
         capture_output=True,
     )
-    # msedge.exe can return before its headless child has written the screenshot.
+    # The browser can return before its headless child has written the screenshot.
     for _ in range(60):
         if png.exists() and png.stat().st_size > 0:
             break
@@ -67,7 +84,7 @@ def render(tmp: Path) -> Image.Image:
     time.sleep(0.5)
     image = Image.open(png).convert("RGBA")
     if image.getbbox() is None:
-        raise SystemExit("Edge rendered an empty image")
+        raise SystemExit("The browser rendered an empty image")
     return image
 
 
@@ -82,6 +99,32 @@ def save_ico(image: Image.Image, sizes: list, *paths: str) -> None:
     for p in paths:
         image.save(ROOT / p, format="ICO", sizes=[(s, s) for s in sizes])
         print(f"{p} ({', '.join(map(str, sizes))})")
+
+
+def centered(image: Image.Image, canvas: int, content: int) -> Image.Image:
+    result = Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0))
+    offset = (canvas - content) // 2
+    result.paste(image.resize((content, content), Image.LANCZOS), (offset, offset))
+    return result
+
+
+def save_mac_icons(image: Image.Image) -> None:
+    icon = centered(image, RENDER_SIZE, MAC_ICON_CONTENT)
+    icon.save(ROOT / "flutter/macos/Runner/AppIcon.icns", format="ICNS")
+    print("flutter/macos/Runner/AppIcon.icns (16-1024)")
+    icon.save(ROOT / "res/mac-icon.png")
+    print(f"res/mac-icon.png ({RENDER_SIZE}px)")
+    # Template: the tile and the mark stay, the white disc between them becomes transparent.
+    r, g, b, a = image.split()
+    whiteness = ImageChops.darker(ImageChops.darker(r, g), b)
+    coverage = whiteness.point(lambda v: min(255, (255 - v) * 2))
+    alpha = ImageChops.multiply(a, coverage)
+    template = Image.new("RGBA", image.size, (0, 0, 0, 255))
+    template.putalpha(alpha)
+    template = centered(template, MAC_TRAY_SIZE, MAC_TRAY_CONTENT)
+    for p in ("res/mac-tray-dark-x2.png", "res/mac-tray-light-x2.png"):
+        template.save(ROOT / p)
+        print(f"{p} ({MAC_TRAY_SIZE}px template)")
 
 
 def save_logos() -> None:
@@ -107,6 +150,7 @@ def main() -> None:
     save_png(image, 64, "res/64x64.png")
     save_png(image, 128, "res/128x128.png")
     save_png(image, 256, "res/128x128@2x.png")
+    save_mac_icons(image)
     save_logos()
 
 
