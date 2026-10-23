@@ -10,7 +10,8 @@
     4. Packs the signed folder into the template's RDPKG resource -> RemoteHelp-<version>-x86_64.exe.
     5. Signs that installer and verifies both signatures.
     6. With -Publish: signs update metadata with the update key and creates the GitHub release
-       <version> in the fork. Installed clients take it once the RemoteHelp server announces it
+       <version> in the fork, or adds the installer to it when the macOS build (build-client-macos.sh)
+       has published it first. Installed clients take it once the RemoteHelp server announces it
        (portal: Settings -> Client updates).
 
     The token must be plugged in before step 3. Output goes to remotehelp\out\.
@@ -174,9 +175,26 @@ Rename-Item (Join-Path $appDir 'rustdesk.exe') "$AppName.exe"
 $version = (& (Join-Path $appDir "$AppName.exe") --version | Out-String).Trim()
 if ($version -notmatch '^\d+\.\d+\.\d+(-[1-9])?$') { throw "Unexpected client version '$version'" }
 Write-Host "Client version: $version"
+$releaseExists = $false
+$otherArtifacts = @()
+$releaseDir = Join-Path $Work 'release'
 if ($Publish) {
     gh release view $version -R $Repo --json tagName 2>$null | Out-Null
-    if ($LASTEXITCODE -eq 0) { throw "Release $version already exists; raise the version with set-version.ps1 and rebuild." }
+    if ($LASTEXITCODE -eq 0) {
+        # Published by the macOS build first: the installer is added, and the metadata is signed again
+        # for all installers of the release.
+        New-Item -ItemType Directory -Force $releaseDir | Out-Null
+        gh release download $version -R $Repo -p rustdesk-update.json -D $releaseDir 2>$null
+        $existingMetadata = Join-Path $releaseDir 'rustdesk-update.json'
+        if (-not (Test-Path $existingMetadata)) { throw "Release $version exists without rustdesk-update.json." }
+        $artifacts = @((Get-Content $existingMetadata -Raw | ConvertFrom-Json).artifacts)
+        if ($artifacts | Where-Object { $_.platform -eq 'windows' }) {
+            throw "Release $version already has a Windows installer; raise the version with set-version.ps1 and rebuild."
+        }
+        $otherArtifacts = $artifacts
+        $releaseExists = $true
+        Write-Host "Release $version exists ($($artifacts.file_name -join ', ')); the installer will be added."
+    }
 }
 
 # --- Sign the app files ------------------------------------------------------------------------
@@ -209,28 +227,41 @@ if ($Publish) {
     Write-Step "Publishing release $version"
     $metadata = Join-Path $Out 'rustdesk-update.json'
     $signature = Join-Path $Out 'rustdesk-update.json.sig'
+    $artifactArgs = @('--artifact', 'windows', 'x86_64', 'exe', $installer)
+    foreach ($artifact in $otherArtifacts) {
+        # Their hashes come from the downloaded files, not from the old metadata.
+        Invoke-Native gh @('release', 'download', $version, '-R', $Repo, '-p', $artifact.file_name, '-D', $releaseDir, '--clobber')
+        $artifactArgs += @('--artifact', $artifact.platform, $artifact.arch, $artifact.format, (Join-Path $releaseDir $artifact.file_name))
+    }
     $env:RUSTDESK_UPDATE_ED25519_SEED = (Get-Content $UpdateKeyFile -Raw).Trim()
     try {
         # File names and schema are what the client's updater expects (src/updater/artifact.rs).
-        Invoke-Native $python @((Join-Path $RepoRoot 'res\update\generate_update_metadata.py'), 'sign',
-            '--artifact', 'windows', 'x86_64', 'exe', $installer,
+        Invoke-Native $python (@((Join-Path $RepoRoot 'res\update\generate_update_metadata.py'), 'sign') + $artifactArgs + @(
             '--version', $version, '--release-id', $version, '--package-id', 'rustdesk',
             '--release-base-url', "https://github.com/$Repo/releases/download",
             '--published-at', (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'),
-            '--metadata-out', $metadata, '--signature-out', $signature)
+            '--metadata-out', $metadata, '--signature-out', $signature))
     } finally {
         Remove-Item Env:RUSTDESK_UPDATE_ED25519_SEED
     }
-    $commit = gh run view "$RunId" -R $Repo --json headSha --jq .headSha
     $notes = "RemoteHelp client $version for Windows x64, built by run https://github.com/$Repo/actions/runs/$RunId."
-    $releaseArgs = @('release', 'create', $version, $installer, $metadata, $signature, '-R', $Repo, '--target', $commit)
-    if ($NoSign) {
-        $releaseArgs += @('--prerelease', '--title', "RemoteHelp $version (unsigned test)",
-            '--notes', "$notes`n`nUnsigned test build (no code signature) for trying the auto-update.")
+    if ($releaseExists) {
+        Invoke-Native gh @('release', 'upload', $version, $installer, $metadata, $signature, '-R', $Repo, '--clobber')
+        $existingNotes = gh release view $version -R $Repo --json body --jq .body | Out-String
+        $notes = "$notes`n$($existingNotes.Trim())"
+        if ($NoSign) { $notes += "`n`nWindows: unsigned test build (no code signature)." }
+        Invoke-Native gh @('release', 'edit', $version, '-R', $Repo, '--notes', $notes)
     } else {
-        $releaseArgs += @('--title', "RemoteHelp $version", '--notes', $notes)
+        $commit = gh run view "$RunId" -R $Repo --json headSha --jq .headSha
+        $releaseArgs = @('release', 'create', $version, $installer, $metadata, $signature, '-R', $Repo, '--target', $commit)
+        if ($NoSign) {
+            $releaseArgs += @('--prerelease', '--title', "RemoteHelp $version (unsigned test)",
+                '--notes', "$notes`n`nUnsigned test build (no code signature) for trying the auto-update.")
+        } else {
+            $releaseArgs += @('--title', "RemoteHelp $version", '--notes', $notes)
+        }
+        Invoke-Native gh $releaseArgs
     }
-    Invoke-Native gh $releaseArgs
     Write-Host "Release: https://github.com/$Repo/releases/tag/$version"
     Write-Host "Roll it out in the RemoteHelp portal: Settings -> Client updates -> $version" -ForegroundColor Yellow
 }

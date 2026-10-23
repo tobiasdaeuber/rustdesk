@@ -72,9 +72,10 @@ Auto-update is on by default (`allow-auto-update` in `client.json`) and only run
 2. Plug in the token and run `.\remotehelp\build-client.ps1 -Publish`. It builds, signs, packs, signs the
    update metadata and creates the release `<version>` here.
 3. On the Mac, run `remotehelp/build-client-macos.sh --publish` (with the signing options above). It adds the DMGs
-   to that release and signs the update metadata again, now covering the Windows installer and both DMGs. Run it
-   after the Windows publish: `build-client.ps1` refuses a release that already exists. The Mac needs a copy of the
-   update key at `~/Library/Application Support/RemoteHelp/update-signing/ed25519-seed.txt` (or `--update-key`).
+   to that release and signs the update metadata again, now covering the Windows installer and both DMGs. The order
+   does not matter: whichever script publishes second adds its installers to the release and signs the metadata
+   for all of them. The Mac needs a copy of the update key at
+   `~/Library/Application Support/RemoteHelp/update-signing/ed25519-seed.txt` (or `--update-key`).
 4. Roll it out in the RemoteHelp portal: **Settings → Client updates**, enter the version, save.
    Clearing the field stops announcing; clients never downgrade.
 
