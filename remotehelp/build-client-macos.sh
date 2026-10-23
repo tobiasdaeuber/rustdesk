@@ -123,11 +123,21 @@ done
 echo "Client version: $version"
 
 # --- Sign and pack -----------------------------------------------------------------------------
+entitlements="$root/flutter/macos/Runner/Release.entitlements"
+if [ "$identity" = '-' ]; then
+    # Ad-hoc signatures have no team ID, so the hardened runtime's library validation would refuse
+    # the Flutter frameworks ("different Team IDs") on current macOS.
+    entitlements="$work/adhoc.entitlements"
+    cp "$root/flutter/macos/Runner/Release.entitlements" "$entitlements"
+    /usr/libexec/PlistBuddy -c 'Add :com.apple.security.cs.disable-library-validation bool true' "$entitlements"
+fi
 dmgs=()
 for arch in $archs; do
     app="$work/$arch/$app_name.app"
     step "Signing $arch ($([ "$identity" = '-' ] && echo 'ad hoc' || echo "$identity"))"
-    bash "$root/.github/scripts/sign-macos-app.sh" "$app" "$identity" "$root/flutter/macos/Runner/Release.entitlements"
+    bash "$root/.github/scripts/sign-macos-app.sh" "$app" "$identity" "$entitlements"
+    "$app/Contents/MacOS/$app_name" --version >/dev/null 2>&1 || [ "$arch" != "$(uname -m | sed 's/arm64/aarch64/')" ] ||
+        fail "The signed $arch app does not start."
 
     step "Packing $app_name-$version-$arch.dmg"
     stage="$work/$arch/dmg"

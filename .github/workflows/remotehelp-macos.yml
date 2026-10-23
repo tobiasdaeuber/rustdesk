@@ -141,7 +141,10 @@ jobs:
         # again keeps the artifact runnable as it is. build-client-macos.sh signs it for release.
         run: |
           app=./flutter/build/macos/Build/Products/Release/RemoteHelp.app
-          bash ./.github/scripts/sign-macos-app.sh "$app" - ./flutter/macos/Runner/Release.entitlements
+          # Ad hoc there is no team ID, so library validation must be off for the Flutter frameworks.
+          cp ./flutter/macos/Runner/Release.entitlements adhoc.entitlements
+          /usr/libexec/PlistBuddy -c 'Add :com.apple.security.cs.disable-library-validation bool true' adhoc.entitlements
+          bash ./.github/scripts/sign-macos-app.sh "$app" - adhoc.entitlements
           version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)"
           reported="$("$app/Contents/MacOS/RemoteHelp" --version)"
           bundle="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")"
