@@ -1798,7 +1798,16 @@ pub fn main_get_software_update_url() {
 /// RemoteHelp: "Check for updates" on the About page. Asks the RemoteHelp server for the version it announces
 /// and returns it when it is newer than this client ("" when up to date); the service, which installs updates,
 /// is then told to run its own check right away.
-pub fn main_check_for_updates() -> ResultType<String> {
+/// JSON `{"version": ...}` or `{"error": ...}`: the bridge generator does not take `ResultType<String>`.
+pub fn main_check_for_updates() -> String {
+    let result = match remotehelp_check_for_updates() {
+        Ok(version) => serde_json::json!({ "version": version }),
+        Err(e) => serde_json::json!({ "error": e.to_string() }),
+    };
+    result.to_string()
+}
+
+fn remotehelp_check_for_updates() -> ResultType<String> {
     #[cfg(target_os = "windows")]
     {
         crate::common::do_check_software_update()?;

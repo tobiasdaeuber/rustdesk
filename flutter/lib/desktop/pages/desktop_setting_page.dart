@@ -2670,10 +2670,16 @@ class _CheckForUpdatesState extends State<_CheckForUpdates> {
     });
     String status;
     try {
-      final version = await bind.mainCheckForUpdates();
-      status = version.isEmpty
-          ? translate('update_up_to_date_tip')
-          : translate('update_found_{$version}_tip');
+      final result = jsonDecode(await bind.mainCheckForUpdates());
+      final String? error = result['error'];
+      final String version = result['version'] ?? '';
+      if (error != null) {
+        status = '${translate('update_check_failed_tip')}: $error';
+      } else {
+        status = version.isEmpty
+            ? translate('update_up_to_date_tip')
+            : translate('update_found_{$version}_tip');
+      }
     } catch (e) {
       status = '${translate('update_check_failed_tip')}: $e';
     }
