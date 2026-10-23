@@ -815,5 +815,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Off", ""),
         ("api_server_connection_tip", ""),
         ("api_server_empty_tip", ""),
+        ("Check for updates", "Nach Updates suchen"),
+        ("Checking for updates...", "Suche nach Updates ..."),
+        ("update_up_to_date_tip", "Dies ist die neueste Version."),
+        ("update_found_{}_tip", "Version {} wird im Hintergrund installiert, sobald keine Sitzung aktiv ist."),
+        ("update_check_failed_tip", "Die Suche nach Updates ist fehlgeschlagen"),
     ].iter().cloned().collect();
 }

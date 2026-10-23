@@ -164,7 +164,9 @@ fn start_auto_update_check_(rx_msg: Receiver<UpdateMsg>) {
         let recv_res = rx_msg.recv_timeout(check_interval);
         match &recv_res {
             Ok(UpdateMsg::CheckUpdate) | Err(_) => {
-                if last_check_time.elapsed() < MIN_INTERVAL {
+                // RemoteHelp: a check the user asked for ("Check for updates") is not held back.
+                let manually = matches!(recv_res, Ok(UpdateMsg::CheckUpdate));
+                if !manually && last_check_time.elapsed() < MIN_INTERVAL {
                     // log::debug!("Update check skipped due to minimum interval.");
                     continue;
                 }
@@ -173,7 +175,7 @@ fn start_auto_update_check_(rx_msg: Receiver<UpdateMsg>) {
                     check_interval = RETRY_INTERVAL;
                     continue;
                 }
-                if let Err(e) = check_update(matches!(recv_res, Ok(UpdateMsg::CheckUpdate))) {
+                if let Err(e) = check_update(manually) {
                     log::error!("Error checking for updates: {}", e);
                     check_interval = RETRY_INTERVAL;
                 } else {

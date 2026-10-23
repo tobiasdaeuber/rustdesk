@@ -2584,6 +2584,11 @@ class _AboutState extends State<_About> {
               SelectionArea(
                   child: Text('${translate('Version')}: $version')
                       .marginSymmetric(vertical: 4.0)),
+              // RemoteHelp: only the service of an installed client installs updates.
+              if (isWindows &&
+                  bind.isCustomClient() &&
+                  bind.mainIsInstalled())
+                const _CheckForUpdates(),
               SelectionArea(
                   child: Text('${translate('Build Date')}: $buildDate')
                       .marginSymmetric(vertical: 4.0)),
@@ -2642,6 +2647,58 @@ class _AboutState extends State<_About> {
         ]),
       );
     });
+  }
+}
+
+// RemoteHelp: asks the RemoteHelp server for the version it announces; when it is newer,
+// the service downloads and installs it (see main_check_for_updates).
+class _CheckForUpdates extends StatefulWidget {
+  const _CheckForUpdates({Key? key}) : super(key: key);
+
+  @override
+  State<_CheckForUpdates> createState() => _CheckForUpdatesState();
+}
+
+class _CheckForUpdatesState extends State<_CheckForUpdates> {
+  bool _checking = false;
+  String _status = '';
+
+  Future<void> _check() async {
+    setState(() {
+      _checking = true;
+      _status = translate('Checking for updates...');
+    });
+    String status;
+    try {
+      final version = await bind.mainCheckForUpdates();
+      status = version.isEmpty
+          ? translate('update_up_to_date_tip')
+          : translate('update_found_{$version}_tip');
+    } catch (e) {
+      status = '${translate('update_check_failed_tip')}: $e';
+    }
+    if (!mounted) return;
+    setState(() {
+      _checking = false;
+      _status = status;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        ElevatedButton(
+          onPressed: _checking ? null : _check,
+          child: Text(translate('Check for updates'))
+              .marginSymmetric(horizontal: 15),
+        ),
+        if (_status.isNotEmpty)
+          Expanded(
+            child: SelectionArea(child: Text(_status)).marginOnly(left: 10),
+          ),
+      ],
+    ).marginSymmetric(vertical: 4.0);
   }
 }
 

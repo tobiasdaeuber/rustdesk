@@ -290,5 +290,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-key-not-supported", "\"{}\" can't be used as a shortcut."),
         ("api_server_connection_tip", "Your custom server uses unencrypted HTTP. Contact your administrator to enable HTTPS."),
         ("api_server_empty_tip", "With API Server empty, your custom server defaults to HTTP. Contact your administrator to enable HTTPS."),
+        ("update_up_to_date_tip", "This is the latest version."),
+        ("update_found_{}_tip", "Version {} is installed in the background as soon as no session is active."),
+        ("update_check_failed_tip", "Could not check for updates"),
     ].iter().cloned().collect();
 }

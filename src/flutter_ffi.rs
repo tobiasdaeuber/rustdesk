@@ -1795,6 +1795,27 @@ pub fn main_get_software_update_url() {
     crate::common::check_software_update();
 }
 
+/// RemoteHelp: "Check for updates" on the About page. Asks the RemoteHelp server for the version it announces
+/// and returns it when it is newer than this client ("" when up to date); the service, which installs updates,
+/// is then told to run its own check right away.
+pub fn main_check_for_updates() -> ResultType<String> {
+    #[cfg(target_os = "windows")]
+    {
+        crate::common::do_check_software_update()?;
+        let url = crate::common::SOFTWARE_UPDATE_URL.lock().unwrap().clone();
+        if url.is_empty() {
+            return Ok("".to_owned());
+        }
+        let version = crate::common::display_version_from_release_id(
+            &crate::common::release_id_from_update_url(&url)?,
+        )?;
+        crate::ipc::check_for_updates()?;
+        Ok(version)
+    }
+    #[cfg(not(target_os = "windows"))]
+    Ok("".to_owned())
+}
+
 pub fn main_get_home_dir() -> String {
     fs::get_home_as_string()
 }

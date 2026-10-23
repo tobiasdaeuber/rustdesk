@@ -496,6 +496,9 @@ pub enum Data {
     TerminalSessionCount(usize),
     #[cfg(target_os = "windows")]
     PortForwardSessionCount(Option<usize>),
+    // RemoteHelp: "Check for updates" in the GUI asks the service to run its update check now.
+    #[cfg(target_os = "windows")]
+    CheckForUpdates,
     SocksWs(Option<Box<(Option<config::Socks5Server>, String)>>),
     #[cfg(target_os = "macos")]
     HasNoActiveConns(Option<bool>),
@@ -1125,6 +1128,10 @@ async fn handle(data: Data, stream: &mut Connection) {
                     ))
                     .await
             );
+        }
+        #[cfg(target_os = "windows")]
+        Data::CheckForUpdates => {
+            allow_err!(crate::updater::manually_check_update());
         }
         #[cfg(target_os = "macos")]
         Data::HasNoActiveConns(None) => {
@@ -2171,6 +2178,14 @@ pub async fn clear_wayland_screencast_restore_token(key: String) -> ResultType<b
 pub async fn update_controlling_session_count(count: usize) -> ResultType<()> {
     let mut c = connect(1000, "").await?;
     c.send(&Data::ControllingSessionCount(count)).await?;
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+#[tokio::main(flavor = "current_thread")]
+pub async fn check_for_updates() -> ResultType<()> {
+    let mut c = connect(1000, "").await?;
+    c.send(&Data::CheckForUpdates).await?;
     Ok(())
 }
 
