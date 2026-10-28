@@ -16,6 +16,7 @@ clients for the RemoteHelp server (`rd.dbnetsoft.com`). `master` follows upstrea
 | Slim CI builds, unsigned (macOS: ad hoc) | `.github/workflows/remotehelp-windows.yml`, `remotehelp-macos.yml` |
 | Local signing, packing and publishing | `remotehelp/build-client.ps1` (Windows), `remotehelp/build-client-macos.sh` (macOS) |
 | Auto-update from this fork's releases, announced by the RemoteHelp server, signed with the RemoteHelp update key; revisions like `1.5.1-2` | `src/common.rs` (`do_check_software_update`, `UPDATE_RELEASE_*`, `display_version_from_release_id`), `src/updater/artifact.rs`, `src/update_metadata.rs` (`TRUSTED_UPDATE_KEYS`), `res/update/generate_update_metadata.py` (`KEY_ID`); on macOS also `check_update_as_root` in `src/updater.rs` (upstream skips custom clients there) |
+| Permanent password: any password is accepted (e.g. a plain word); the strength rules are shown as hints only | `setPasswordDialog()` in `flutter/lib/desktop/pages/desktop_home_page.dart` |
 | Version | `remotehelp/set-version.ps1` (Cargo.toml, Cargo.lock) |
 
 `client.json` uses the format of a RustDesk custom client (`custom.txt`): `app-name`, `override-settings`

@@ -899,6 +899,7 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
   final presetPassword = permanentPasswordSet && !localPasswordSet;
   var canSubmit = false;
   final RxString rxPass = "".obs;
+  // RemoteHelp: weak permanent passwords are allowed; the rules below are shown as hints only.
   final rules = [
     DigitValidationRule(),
     UppercaseValidationRule(),
@@ -927,16 +928,6 @@ void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
         errMsg1 = "";
       });
       final pass = p0.text.trim();
-      if (pass.isNotEmpty) {
-        final Iterable violations = rules.where((r) => !r.validate(pass));
-        if (violations.isNotEmpty) {
-          setState(() {
-            errMsg0 =
-                '${translate('Prompt')}: ${violations.map((r) => r.name).join(', ')}';
-          });
-          return;
-        }
-      }
       if (p1.text.trim() != pass) {
         setState(() {
           errMsg1 =
