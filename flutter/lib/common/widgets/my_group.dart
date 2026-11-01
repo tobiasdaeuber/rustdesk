@@ -178,13 +178,17 @@ class _MyGroupState extends State<MyGroup> {
         }
         return true;
       }).toList();
+      // RemoteHelp: "All devices" first, so clearing the filter does not need a second click on the selected item.
       listView(bool isPortrait) => ListView.builder(
           shrinkWrap: isPortrait,
-          itemCount: deviceGroupItems.length + userItems.length,
-          itemBuilder: (context, index) => index < deviceGroupItems.length
-              ? _buildDeviceGroupItem(deviceGroupItems[index])
-              : _buildUserItem(userItems[index - deviceGroupItems.length],
-                  displayNameCount));
+          itemCount: 1 + deviceGroupItems.length + userItems.length,
+          itemBuilder: (context, index) => index == 0
+              ? _buildAllItem()
+              : index - 1 < deviceGroupItems.length
+                  ? _buildDeviceGroupItem(deviceGroupItems[index - 1])
+                  : _buildUserItem(
+                      userItems[index - 1 - deviceGroupItems.length],
+                      displayNameCount));
       var maxHeight = max(MediaQuery.of(context).size.height / 6, 100.0);
       return Obx(() => stateGlobal.isPortrait.isFalse
           ? listView(false)
@@ -263,6 +267,37 @@ class _MyGroupState extends State<MyGroup> {
               ],
             ).paddingSymmetric(vertical: 4),
           ),
+        );
+      },
+    )).marginSymmetric(horizontal: 12).marginOnly(bottom: 6);
+  }
+
+  Widget _buildAllItem() {
+    return InkWell(onTap: () {
+      isSelectedDeviceGroup.value = false;
+      selectedAccessibleItemName.value = '';
+    }, child: Obx(
+      () {
+        final selected = selectedAccessibleItemName.value.isEmpty;
+        return Container(
+          decoration: BoxDecoration(
+            color: selected ? MyTheme.color(context).highlight : null,
+            border: Border(
+                bottom: BorderSide(
+                    width: 0.7,
+                    color: Theme.of(context).dividerColor.withOpacity(0.1))),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 20,
+                height: 20,
+                child: Icon(Icons.devices_outlined,
+                    color: MyTheme.accent, size: 18),
+              ).marginOnly(right: 4),
+              Expanded(child: Text(translate('All devices'))),
+            ],
+          ).paddingSymmetric(vertical: 4),
         );
       },
     )).marginSymmetric(horizontal: 12).marginOnly(bottom: 6);

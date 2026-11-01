@@ -820,5 +820,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("update_up_to_date_tip", "Dies ist die neueste Version."),
         ("update_found_{}_tip", "Version {} wird im Hintergrund installiert, sobald keine Sitzung aktiv ist."),
         ("update_check_failed_tip", "Die Suche nach Updates ist fehlgeschlagen"),
+        ("All devices", "Alle Geräte"),
     ].iter().cloned().collect();
 }

@@ -22,6 +22,8 @@ class Peer {
   String device_group_name;
   String note;
   bool? sameServer;
+  // RemoteHelp: URL of the device's image on the RemoteHelp server ("" without one), shown instead of the OS icon.
+  String image;
 
   String getId() {
     if (alias != '') {
@@ -45,7 +47,8 @@ class Peer {
         loginName = json['loginName'] ?? '',
         device_group_name = json['device_group_name'] ?? '',
         note = json['note'] is String ? json['note'] : '',
-        sameServer = json['same_server'];
+        sameServer = json['same_server'],
+        image = json['rh_image'] is String ? json['rh_image'] : '';
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
@@ -64,6 +67,7 @@ class Peer {
       'device_group_name': device_group_name,
       'note': note,
       'same_server': sameServer,
+      'rh_image': image,
     };
   }
 
@@ -90,6 +94,7 @@ class Peer {
       "platform": platform,
       "login_name": loginName,
       "device_group_name": device_group_name,
+      "rh_image": image,
     };
   }
 
@@ -109,6 +114,7 @@ class Peer {
     required this.device_group_name,
     required this.note,
     this.sameServer,
+    this.image = '',
   });
 
   Peer.loading()
@@ -142,7 +148,8 @@ class Peer {
         rdpUsername == other.rdpUsername &&
         device_group_name == other.device_group_name &&
         loginName == other.loginName &&
-        note == other.note;
+        note == other.note &&
+        image == other.image;
   }
 
   factory Peer.copy(Peer other) {
@@ -161,7 +168,8 @@ class Peer {
         loginName: other.loginName,
         device_group_name: other.device_group_name,
         note: other.note,
-        sameServer: other.sameServer);
+        sameServer: other.sameServer,
+        image: other.image);
     peer.online = other.online;
     return peer;
   }
