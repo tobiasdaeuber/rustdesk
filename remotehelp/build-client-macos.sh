@@ -136,8 +136,11 @@ for arch in $archs; do
     app="$work/$arch/$app_name.app"
     step "Signing $arch ($([ "$identity" = '-' ] && echo 'ad hoc' || echo "$identity"))"
     bash "$root/.github/scripts/sign-macos-app.sh" "$app" "$identity" "$entitlements"
-    "$app/Contents/MacOS/$app_name" --version >/dev/null 2>&1 || [ "$arch" != "$(uname -m | sed 's/arm64/aarch64/')" ] ||
-        fail "The signed $arch app does not start."
+    # Only the app for this Mac's CPU is started: an Intel app on Apple Silicon would run under Rosetta,
+    # which macOS warns about because macOS 28 drops it.
+    if [ "$arch" = "$(uname -m | sed 's/arm64/aarch64/')" ]; then
+        "$app/Contents/MacOS/$app_name" --version >/dev/null 2>&1 || fail "The signed $arch app does not start."
+    fi
 
     step "Packing $app_name-$version-$arch.dmg"
     stage="$work/$arch/dmg"
