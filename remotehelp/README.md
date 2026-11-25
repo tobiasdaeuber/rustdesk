@@ -37,6 +37,8 @@ Plug in the code-signing token, then in this repository:
 It starts the GitHub Actions build, waits for it (45–75 min), downloads the result, signs every
 `.exe`/`.dll` here, packs them into `remotehelp\out\RemoteHelp-<version>-x86_64.exe` and signs that.
 `-RunId <id>` re-uses a finished run; `-NoSign` skips signing; `-CertThumbprint` picks a certificate.
+Without `-CertThumbprint` it signs with the one valid code-signing certificate in the user's store (the token's)
+and stops before building if the token is not plugged in.
 
 ## Building (macOS)
 

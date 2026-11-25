@@ -24,7 +24,8 @@
     Branch of the fork to build. Default: remotehelp.
 
 .PARAMETER CertThumbprint
-    SHA-1 thumbprint of the signing certificate. Default: signtool picks the best one (/a).
+    SHA-1 thumbprint of the signing certificate. Default: the one valid code-signing certificate with a
+    private key in CurrentUser\My (the token's); the script stops before building if there is none or several.
 
 .PARAMETER TimestampUrl
     RFC 3161 timestamp server. Default: http://timestamp.digicert.com
@@ -91,8 +92,21 @@ function Find-SignTool {
 
 function Invoke-Sign([string[]]$Files) {
     if ($NoSign -or $Files.Count -eq 0) { return }
-    $certArgs = if ($CertThumbprint) { @('/sha1', $CertThumbprint) } else { @('/a') }
-    Invoke-Native $script:SignTool (@('sign', '/fd', 'sha256', '/tr', $TimestampUrl, '/td', 'sha256') + $certArgs + $Files)
+    Invoke-Native $script:SignTool (@('sign', '/fd', 'sha256', '/tr', $TimestampUrl, '/td', 'sha256', '/sha1', $script:SignCert) + $Files)
+}
+
+# Not signtool /a: without the token it falls back to any certificate with a private key
+# (e.g. an Entra ID device certificate) and signs with that.
+function Find-CodeSigningCert {
+    $now = Get-Date
+    $certs = @(Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert |
+        Where-Object { $_.HasPrivateKey -and $_.NotBefore -le $now -and $_.NotAfter -gt $now })
+    if ($certs.Count -eq 0) { throw 'No valid code-signing certificate found; plug in the code-signing token (or use -NoSign).' }
+    if ($certs.Count -gt 1) {
+        $list = ($certs | ForEach-Object { "  $($_.Thumbprint)  $($_.GetNameInfo('SimpleName', $false))" }) -join "`n"
+        throw "Several code-signing certificates found; pick one with -CertThumbprint:`n$list"
+    }
+    return $certs[0]
 }
 
 # Writes $Payload into the RCDATA resource "RDPKG" of $Exe, which the packer reads at startup.
@@ -139,7 +153,13 @@ if ($Publish) {
         Invoke-Native $python @('-m', 'pip', 'install', '--user', '--quiet', 'cryptography')
     }
 }
-if (-not $NoSign) { $script:SignTool = Find-SignTool }
+if (-not $NoSign) {
+    $script:SignTool = Find-SignTool
+    $script:SignCert = if ($CertThumbprint) { $CertThumbprint } else { (Find-CodeSigningCert).Thumbprint }
+    $signCertItem = Get-Item "Cert:\CurrentUser\My\$script:SignCert" -ErrorAction SilentlyContinue
+    $certName = if ($signCertItem) { $signCertItem.GetNameInfo('SimpleName', $false) } else { 'not in CurrentUser\My' }
+    Write-Host "Signing certificate: $certName ($script:SignCert)"
+}
 
 # --- Build on GitHub Actions -------------------------------------------------------------------
 if (-not $RunId) {
