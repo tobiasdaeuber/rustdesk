@@ -460,9 +460,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
     if (isWindows && !bind.isDisableInstallation()) {
       if (!bind.mainIsInstalled()) {
-        return buildInstallCard(
-            "", bind.isOutgoingOnly() ? "" : "install_tip", "Install",
-            () async {
+        // RemoteHelp: button only. The long UAC tip pushed the button out of the window on most screens.
+        return buildInstallCard("", "", "Install", () async {
           await rustDeskWinManager.closeAllSubWindows();
           bind.mainGotoInstall();
         });
